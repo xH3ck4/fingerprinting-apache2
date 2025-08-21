@@ -111,7 +111,6 @@ curl http://localhost:8080
 ├── ⚙️ fingerprint.conf              # Apache Lua configuration
 ├── 📂 public/                       # Web document root
 │   ├── 🏠 index.php                # Demo application
-│   └── 📊 status.php               # Security dashboard
 ├── 📂 docs/                        # Documentation & screenshots
 │   ├── 🖼️ screenshot1.png
 │   ├── 🖼️ screenshot2.png
