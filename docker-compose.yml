@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  web:
+    build: .
+    container_name: fingerprinting-apache2
+    ports:
+      - "8080:80"
+    volumes:
+      - ./public:/var/www/html/public
+      - ./fingerprint.lua:/etc/apache2/lua/fingerprint.lua
+      - ./fingerprint.conf:/etc/apache2/conf-available/fingerprint.conf
+    restart: always
