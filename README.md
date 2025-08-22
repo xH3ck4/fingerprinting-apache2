@@ -126,7 +126,7 @@ curl http://localhost:8080
 
 ### 🎛️ **Security Settings**
 
-Customize your security level in `fingerprint.lua`:
+Customize your security level and whitelist trusted IPs in `fingerprint.lua`:
 
 ```lua
 -- 🎯 Core Configuration
@@ -135,11 +135,20 @@ local BLOCK_TIME = 60       -- Block duration (seconds)
 local BOT_THRESHOLD = 30    -- Bot detection threshold (0-100%)
 local STRICT_MODE = true    -- Enable aggressive bot detection
 
+-- 🟢 Whitelist Trusted IPs
+local WHITELIST_IPS = {
+    "127.0.0.1",        -- Localhost
+    "192.168.1.100",    -- Example internal IP
+    -- Add more IPs as needed
+}
+
 -- 📂 File Paths
 local LOG_FILE = "/var/log/apache2/lua/apache_antibrute.log"
 local DATA_FILE = "/var/log/apache2/lua/apache_antibrute_data.txt"
 local SCORE_FILE = "/var/log/apache2/lua/apache_antibrute_scores.txt"
 ```
+
+> **Note:** Requests from IPs in `WHITELIST_IPS` will bypass bot detection and rate limiting.
 
 ### ⚙️ **Configuration Profiles**
 
@@ -238,56 +247,28 @@ docker exec webserver cat /var/log/apache2/lua/apache_antibrute_scores.txt
 docker exec webserver grep "BLOCKED" /var/log/apache2/lua/apache_antibrute.log
 ```
 
----
+### 🔎 **Request Route & Body Monitoring**
 
-## 🎯 Use Cases
+- Semua metode HTTP (GET, POST, PUT, DELETE, PATCH, dll) dipantau secara real-time.
+- Setiap request yang masuk akan dicatat route/endpoint yang diakses dan isi body request (jika ada).
+- Log detail dapat digunakan untuk audit, debugging, dan analisis keamanan.
 
-<table>
-<tr>
-<td width="33%">
+```bash
+# Lihat log semua request beserta route dan body
+docker exec webserver tail -f /var/log/apache2/lua/request_body.log
 
-### 🌐 **Web Applications**
-- E-commerce sites
-- Content management
-- User portals
-- Landing pages
+# Contoh format log:
+# [2025-06-01 12:00:00] METHOD:POST ROUTE:/api/login BODY:{"username":"budiblack","email":"budiblack@example.com"}
+# [2025-06-01 12:00:01] METHOD:GET ROUTE:/dashboard BODY:-
 
-**Benefits:**
-- 🛡️ DDoS protection
-- 🤖 Bot filtering
-- 📈 Performance optimization
+# Filter request ke route tertentu
+docker exec webserver grep "/api/login" /var/log/apache2/lua/request_body.log
 
-</td>
-<td width="33%">
+# Analisis body request untuk pola tertentu
+docker exec webserver grep "username" /var/log/apache2/lua/request_body.log
+```
 
-### 🔌 **API Endpoints**
-- REST APIs
-- GraphQL endpoints
-- Microservices
-- Webhooks
-
-**Benefits:**
-- ⚡ Rate limiting
-- 🔐 Access control
-- 📊 Usage analytics
-
-</td>
-<td width="33%">
-
-### 🎮 **Gaming Platforms**
-- Game servers
-- Leaderboards
-- User authentication
-- In-game purchases
-
-**Benefits:**
-- 🚫 Cheating prevention
-- 🤖 Bot detection
-- 🔒 Secure transactions
-
-</td>
-</tr>
-</table>
+> **Note:** Monitoring ini membantu mendeteksi aktivitas mencurigakan, brute force, dan eksploitasi API dengan lebih detail.
 
 ---
 
