@@ -96,6 +96,130 @@ local DYNAMIC_WHITELIST_RANGES = {}
 local WHITELIST_LAST_LOADED = 0
 local WHITELIST_RELOAD_INTERVAL = 300 -- Reload setiap 5 menit
 
+-- Skip Request
+function should_skip_request(r)
+    -- 1. Skip untuk request dengan cookie session (umum untuk semua aplikasi web)
+    local cookie = r.headers_in and r.headers_in["Cookie"] or ""
+    if cookie:match("session") or cookie:match("SESSION") or 
+       cookie:match("token") or cookie:match("TOKEN") or
+       cookie:match("csrf") or cookie:match("CSRF") or
+       cookie:match("auth") or cookie:match("AUTH") then
+        return true, "Session cookie detected"
+    end
+    
+    -- 2. Skip untuk request AJAX (umum untuk aplikasi web modern)
+    if r.headers_in and r.headers_in["X-Requested-With"] == "XMLHttpRequest" then
+        return true, "AJAX request detected"
+    end
+    
+    -- 3. Skip untuk header keamanan umum
+    local security_headers = {
+        ["X-CSRF-TOKEN"] = true,
+        ["X-XSRF-TOKEN"] = true,
+        ["X-Requested-With"] = true,
+        ["X-API-KEY"] = true,
+        ["X-Auth-Token"] = true,
+        ["X-Access-Token"] = true,
+        ["Authorization"] = true,
+        ["Proxy-Authorization"] = true,
+        ["WWW-Authenticate"] = true,
+        ["Cookie"] = true  -- Skip semua request yang memiliki cookie
+    }
+    
+    if r.headers_in then
+        for header, _ in pairs(security_headers) do
+            if r.headers_in[header] then
+                return true, "Security header detected: " .. header
+            end
+        end
+    end
+    
+    -- 4. Skip untuk header framework modern
+    local framework_headers = {
+        ["X-Livewire"] = true,
+        ["X-Inertia"] = true,
+        ["X-Vue-Component"] = true,
+        ["X-React-Component"] = true,
+        ["X-Angular-Component"] = true,
+        ["X-Nextjs-Data"] = true,
+        ["X-Nuxt-Data"] = true,
+        ["X-WordPress"] = true,
+        ["X-Joomla"] = true,
+        ["X-Drupal"] = true
+    }
+    
+    if r.headers_in then
+        for header, _ in pairs(framework_headers) do
+            if r.headers_in[header] then
+                return true, "Framework header detected: " .. header
+            end
+        end
+    end
+    
+    -- 5. Skip untuk file statis (umum untuk semua website)
+    local static_extensions = {
+        "%.css$", "%.js$", "%.png$", "%.jpg$", "%.jpeg$", "%.gif$", 
+        "%.ico$", "%.svg$", "%.woff$", "%.woff2$", "%.ttf$", "%.eot$", 
+        "%.otf$", "%.mp4$", "%.webm$", "%.mp3$", "%.wav$", "%.pdf$",
+        "%.doc$", "%.docx$", "%.xls$", "%.xlsx$", "%.ppt$", "%.pptx$",
+        "%.zip$", "%.rar$", "%.tar$", "%.gz$", "%.7z$", "%.dmg$",
+        "%.exe$", "%.msi$", "%.deb$", "%.rpm$", "%.apk$", "%.ipa$"
+    }
+    
+    local uri = r.uri or ""
+    for _, pattern in ipairs(static_extensions) do
+        if uri:match(pattern) then
+            return true, "Static file detected: " .. uri
+        end
+    end
+    
+    -- 6. Skip untuk route umum yang tidak perlu pemeriksaan
+    local skip_routes = {
+        "^/robots%.txt$", "^/sitemap%.xml$", "^/favicon%.ico$",
+        "^/apple%-touch%-icon", "^/manifest%.json$",
+        "^/health$", "^/ping$", "^/status$",
+        "^/metrics$", "^/monitoring$", "^/uptime$"
+    }
+    
+    for _, pattern in ipairs(skip_routes) do
+        if uri:match(pattern) then
+            return true, "Common route detected: " .. uri
+        end
+    end
+    
+    -- 7. Skip untuk method HTTP yang tidak perlu pemeriksaan
+    local skip_methods = {
+        "OPTIONS", "HEAD", "TRACE"
+    }
+    
+    local method = r.method or ""
+    for _, skip_method in ipairs(skip_methods) do
+        if method == skip_method then
+            return true, "Skip method: " .. method
+        end
+    end
+    
+    -- 8. Skip untuk User-Agent tertentu (bot yang aman)
+    local safe_user_agents = {
+        "googlebot", "bingbot", "slurp", "duckduckbot", 
+        "baiduspider", "yandexbot", "facebookexternalhit",
+        "twitterbot", "linkedinbot", "whatsapp", "telegram",
+        "slackbot", "discordbot", "skypeuripreview",
+        "wordpress", "jetpack", "woocommerce"
+    }
+    
+    local user_agent = r.headers_in and r.headers_in["User-Agent"] or ""
+    user_agent = user_agent:lower()
+    
+    for _, bot in ipairs(safe_user_agents) do
+        if user_agent:match(bot) then
+            return true, "Safe bot detected: " .. bot
+        end
+    end
+    
+    return false, ""
+end
+
 -- Fungsi untuk memuat whitelist dari file
 function load_whitelist_from_file()
     local current_time = os.time()
@@ -638,7 +762,7 @@ function send_blocked_response(r, ttl, score, reason)
     </head>
     <body>
         <div class="container">
-            <h1 class="error">🚫 Access Blocked</h1>
+            <h1 class="error">?? Access Blocked</h1>
             <div class="score">Bot Detection Score: ]] .. score .. [[%</div>
             <div class="reason">Reason: ]] .. reason .. [[</div>
             <p>Your request has been blocked due to suspicious activity patterns.</p>
@@ -773,6 +897,17 @@ end
 
 -- Fungsi utama untuk pengecekan akses
 function check_access(r)
+
+    -- Skip Cookies Request
+    local should_skip, reason = should_skip_request(r)
+    if should_skip then
+        -- Log untuk debugging (opsional)
+        pcall(function()
+            log_message(string.format("SKIPPED: %s - %s", r.uri or "", reason), "main")
+        end)
+        return apache2.OK
+    end
+
     -- Protected call untuk seluruh operasi
     local success, result = pcall(function()
         -- Dapatkan IP address dengan error handling
